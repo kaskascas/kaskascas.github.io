@@ -3,102 +3,136 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Coffee Ratio</title>
+  <title>Coffee Ratio Roller</title>
   <style>
-    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 560px; margin: auto; }
-    .card { border: 1px solid #ddd; border-radius: 18px; padding: 14px; }
-    label { display:block; margin: 10px 0 6px; font-size: 14px; color:#333; }
-    input { width: 100%; font-size: 18px; padding: 10px; border-radius: 14px; border: 1px solid #ccc; }
-    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .btns { display:flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-    button { padding: 10px 12px; font-size: 15px; border-radius: 14px; border: 1px solid #ccc; background:#f7f7f7; cursor:pointer; }
-    .meta { margin-top: 10px; font-size: 16px; }
-    .small { font-size: 12px; color:#666; margin-top: 6px; }
+    body { font-family: system-ui, sans-serif; padding: 18px; max-width: 520px; margin: auto; }
+    .card { border: 1px solid #ddd; border-radius: 20px; padding: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    label { display:block; margin: 10px 0 8px; font-size: 14px; color:#333; }
+    .picker {
+      width: 100%;
+      font-size: 34px;           /* big = “roller” vibe */
+      padding: 14px 14px;
+      border-radius: 18px;
+      border: 1px solid #ccc;
+      text-align: center;
+      appearance: textfield;
+    }
+    .controls { display:flex; gap: 10px; margin-top: 10px; }
+    button {
+      flex: 1;
+      padding: 12px 12px;
+      font-size: 16px;
+      border-radius: 16px;
+      border: 1px solid #ccc;
+      background: #f7f7f7;
+      cursor: pointer;
+    }
+    .meta { margin-top: 14px; font-size: 16px; color:#111; }
+    .small { margin-top: 6px; font-size: 12px; color:#666; }
+    hr { border: none; border-top: 1px solid #eee; margin: 14px 0; }
   </style>
 </head>
 <body>
-  <h2>Coffee / Water Calculator</h2>
+  <h2>Coffee / Water Roller</h2>
 
   <div class="card">
     <div class="row">
       <div>
+        <label>Water (ml / g)</label>
+        <input id="water" class="picker" type="number" inputmode="numeric"
+               min="50" max="2000" step="10" value="250" />
+        <div class="controls">
+          <button type="button" id="wDown">−10</button>
+          <button type="button" id="wUp">+10</button>
+        </div>
+      </div>
+
+      <div>
+        <label>Coffee (g)</label>
+        <input id="coffee" class="picker" type="number" inputmode="decimal"
+               min="1" max="200" step="0.5" value="16.0" />
+        <div class="controls">
+          <button type="button" id="cDown">−0.5</button>
+          <button type="button" id="cUp">+0.5</button>
+        </div>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="row">
+      <div>
         <label>Ratio coffee (g)</label>
-        <input id="rc" type="number" step="0.1" value="16">
+        <input id="ratioCoffee" class="picker" type="number" step="0.1" value="16" />
       </div>
       <div>
-        <label>Ratio water (g/ml)</label>
-        <input id="rw" type="number" step="1" value="250">
+        <label>Ratio water (ml/g)</label>
+        <input id="ratioWater" class="picker" type="number" step="1" value="250" />
       </div>
     </div>
 
-    <div class="btns">
-      <button type="button" data-water="250">250 ml</button>
-      <button type="button" data-water="300">300 ml</button>
-      <button type="button" data-water="350">350 ml</button>
-      <button type="button" data-water="500">500 ml</button>
-    </div>
-
-    <label>Water in (g/ml)</label>
-    <input id="win" type="number" step="1" placeholder="Type water… (e.g. 300)">
-
-    <label>Coffee out (g)</label>
-    <input id="cout" type="number" step="0.1" placeholder="Auto" readonly>
-
-    <hr style="border:none;border-top:1px solid #eee;margin:14px 0;">
-
-    <label>Coffee in (g)</label>
-    <input id="cin" type="number" step="0.1" placeholder="Type coffee… (e.g. 20)">
-
-    <label>Water out (g/ml)</label>
-    <input id="wout" type="number" step="1" placeholder="Auto" readonly>
-
     <div class="meta" id="ratioText"></div>
-    <div class="small">Tip: 1 ml water ≈ 1 g for this calculator.</div>
+    <div class="small">Tip: change Water and Coffee by scrolling the number picker, or use the +/− buttons.</div>
   </div>
 
 <script>
-  const rc = document.getElementById('rc');
-  const rw = document.getElementById('rw');
-  const win = document.getElementById('win');
-  const cout = document.getElementById('cout');
-  const cin = document.getElementById('cin');
-  const wout = document.getElementById('wout');
-  const ratioText = document.getElementById('ratioText');
+  const water = document.getElementById('water');
+  const coffee = document.getElementById('coffee');
+  const ratioCoffee = document.getElementById('ratioCoffee');
+  const ratioWater  = document.getElementById('ratioWater');
+  const ratioText   = document.getElementById('ratioText');
 
-  function num(x){ x = Number(x); return Number.isFinite(x) ? x : 0; }
-  function round1(x){ return (Math.round(x*10)/10).toFixed(1); }
+  const n = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  };
+  const round1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
   function updateRatioText(){
-    const a = num(rc.value), b = num(rw.value);
-    ratioText.textContent = (a>0 && b>0) ? `Ratio ≈ 1:${(b/a).toFixed(1)} (water per coffee)` : '';
+    const rc = n(ratioCoffee.value), rw = n(ratioWater.value);
+    ratioText.textContent = (rc>0 && rw>0) ? `Ratio ≈ 1:${(rw/rc).toFixed(1)} (water per coffee)` : '';
   }
 
-  function calcFromWater(){
-    const a = num(rc.value), b = num(rw.value), w = num(win.value);
-    cout.value = (a>0 && b>0 && w>0) ? round1((a/b)*w) : '';
+  // Mode: default is water drives coffee (simple for most people)
+  function coffeeFromWater(){
+    const rc = n(ratioCoffee.value), rw = n(ratioWater.value), w = n(water.value);
+    if(rc<=0 || rw<=0 || w<=0) return;
+    coffee.value = round1((rc / rw) * w);
     updateRatioText();
   }
 
-  function calcFromCoffee(){
-    const a = num(rc.value), b = num(rw.value), c = num(cin.value);
-    wout.value = (a>0 && b>0 && c>0) ? String(Math.round((b/a)*c)) : '';
+  // Optional: if user edits coffee directly, update water to match
+  function waterFromCoffee(){
+    const rc = n(ratioCoffee.value), rw = n(ratioWater.value), c = n(coffee.value);
+    if(rc<=0 || rw<=0 || c<=0) return;
+    water.value = String(Math.round((rw / rc) * c));
     updateRatioText();
   }
 
-  document.querySelectorAll('button[data-water]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      win.value = btn.getAttribute('data-water');
-      cin.value = '';
-      wout.value = '';
-      calcFromWater();
-    });
-  });
+  // Step buttons
+  function step(el, delta){
+    const cur = n(el.value);
+    const step = n(el.step) || 1;
+    const next = cur + delta;
+    el.value = (step < 1) ? round1(next) : String(Math.round(next));
+    el.dispatchEvent(new Event('input', { bubbles:true }));
+  }
 
-  rc.addEventListener('input', () => { calcFromWater(); calcFromCoffee(); });
-  rw.addEventListener('input', () => { calcFromWater(); calcFromCoffee(); });
-  win.addEventListener('input', () => { cin.value=''; wout.value=''; calcFromWater(); });
-  cin.addEventListener('input', () => { win.value=''; cout.value=''; calcFromCoffee(); });
+  document.getElementById('wDown').onclick = () => step(water, -10);
+  document.getElementById('wUp').onclick   = () => step(water, +10);
+  document.getElementById('cDown').onclick = () => step(coffee, -0.5);
+  document.getElementById('cUp').onclick   = () => step(coffee, +0.5);
 
+  // Inputs
+  water.addEventListener('input', coffeeFromWater);
+  ratioCoffee.addEventListener('input', coffeeFromWater);
+  ratioWater.addEventListener('input', coffeeFromWater);
+
+  // If you want coffee to drive water when you edit coffee, keep this:
+  coffee.addEventListener('input', waterFromCoffee);
+
+  // init
   updateRatioText();
 </script>
 </body>
