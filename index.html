@@ -6,18 +6,19 @@
   <title>Coffee Wheels</title>
   <style>
     :root{
-      --bg:#070707;                 /* much darker */
-      --fg:#FFFFFF;
+      --bg:#050505;
+      --fg:#fff;
       --line:rgba(255,255,255,.22);
+      --line2:rgba(255,255,255,.14);
       --card:rgba(255,255,255,.03);
 
       --radius:22px;
-      --visible:5;                  /* odd */
-      --itemH:56px;                 /* visual target; JS measures real height */
+      --itemH:56px;
+      --visible:5; /* odd */
     }
 
     *{ box-sizing:border-box; }
-    html, body { height:100%; }
+    html, body{ height:100%; }
     body{
       margin:0;
       background:var(--bg);
@@ -26,16 +27,16 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      padding: 18px;
+      padding:18px;
       -webkit-tap-highlight-color: transparent;
     }
 
-    .wrap{ width:min(760px, 100%); }
+    .wrap{ width:min(780px, 100%); }
 
     .grid{
       display:grid;
       grid-template-columns: 1fr 1fr;
-      gap: 14px;
+      gap:14px;
     }
 
     .panel{
@@ -47,10 +48,11 @@
 
     .title{
       text-align:center;
-      font-weight: 650;
-      font-size: 16px;
+      font-weight:700;
+      font-size:16px;
+      color:rgba(255,255,255,.95);
       margin: 4px 0 12px;
-      color: rgba(255,255,255,.92);
+      letter-spacing: .2px;
     }
 
     .wheelWrap{
@@ -60,10 +62,11 @@
       overflow:hidden;
       border:1px solid var(--line);
       background: rgba(255,255,255,.02);
-      touch-action: pan-y;
+      touch-action: none; /* IMPORTANT: we handle dragging ourselves */
+      user-select:none;
     }
 
-    /* Center selection highlight */
+    /* center selection highlight */
     .wheelWrap::before{
       content:"";
       position:absolute;
@@ -77,52 +80,70 @@
       pointer-events:none;
     }
 
-    /* Fade top/bottom */
+    /* fade top/bottom */
     .wheelWrap::after{
       content:"";
       position:absolute;
       inset:0;
       background: linear-gradient(to bottom,
-        rgba(7,7,7,0.98) 0%,
-        rgba(7,7,7,0.00) 26%,
-        rgba(7,7,7,0.00) 74%,
-        rgba(7,7,7,0.98) 100%);
+        rgba(5,5,5,0.98) 0%,
+        rgba(5,5,5,0.00) 26%,
+        rgba(5,5,5,0.00) 74%,
+        rgba(5,5,5,0.98) 100%);
       z-index:2;
       pointer-events:none;
     }
 
-    .wheel{
-      height:100%;
-      overflow-y:auto;
-
-      /* strong snapping */
-      scroll-snap-type: y mandatory;
-      scroll-snap-stop: always;
-
-      /* IMPORTANT: kill momentum so it stops on release */
-      -webkit-overflow-scrolling: auto;
-
-      padding: calc((var(--visible) / 2) * var(--itemH)) 10px;
-      scrollbar-width:none;
+    .track{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      z-index:1;
+      will-change: transform;
     }
-    .wheel::-webkit-scrollbar{ display:none; }
+
+    .items{
+      width:100%;
+      padding: calc((var(--visible) / 2) * var(--itemH)) 10px;
+    }
 
     .item{
       height: var(--itemH);
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size: 38px;
-      font-weight: 700;
-      color: var(--fg);
+      font-size: 40px;
+      font-weight: 800;
       font-variant-numeric: tabular-nums;
-      scroll-snap-align: center;
-      user-select:none;
+      color: var(--fg);
+      opacity: .92;
     }
+
+    .controls{
+      display:flex;
+      gap:10px;
+      margin-top:12px;
+    }
+
+    .btn{
+      flex:1;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: var(--fg);
+      border-radius: 16px;
+      padding: 12px 10px;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .btn:active{ transform: scale(0.99); }
 
     @media (max-width: 520px){
       .grid{ grid-template-columns: 1fr; }
-      .item{ font-size: 40px; }
+      .item{ font-size: 42px; }
     }
   </style>
 </head>
@@ -131,15 +152,27 @@
     <div class="grid">
       <div class="panel">
         <div class="title">Coffee (g)</div>
-        <div class="wheelWrap">
-          <div id="coffeeWheel" class="wheel" aria-label="Coffee wheel"></div>
+        <div class="wheelWrap" id="coffeeWrap" aria-label="Coffee wheel">
+          <div class="track" id="coffeeTrack">
+            <div class="items" id="coffeeItems"></div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn" id="coffeeDown" type="button">▼</button>
+          <button class="btn" id="coffeeUp" type="button">▲</button>
         </div>
       </div>
 
       <div class="panel">
         <div class="title">Water (ml)</div>
-        <div class="wheelWrap">
-          <div id="waterWheel" class="wheel" aria-label="Water wheel"></div>
+        <div class="wheelWrap" id="waterWrap" aria-label="Water wheel">
+          <div class="track" id="waterTrack">
+            <div class="items" id="waterItems"></div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn" id="waterDown" type="button">▼</button>
+          <button class="btn" id="waterUp" type="button">▲</button>
         </div>
       </div>
     </div>
@@ -147,136 +180,193 @@
 
 <script>
 (() => {
-  // LOCKED ratio: 16 / 250
+  // Locked ratio: 16 / 250
   const R_C = 16;
   const R_W = 250;
 
-  const cfg = {
-    water: { min: 150, max: 1000, step: 1, start: 250 }, // 150–1000 ml
-    coffeeStep: 0.1                                       // 0.1 g
-  };
+  const ITEM_H = 56;         // must match CSS --itemH
+  const VISIBLE = 5;
 
-  const coffeeWheel = document.getElementById("coffeeWheel");
-  const waterWheel  = document.getElementById("waterWheel");
+  const waterCfg = { min:150, max:1000, step:5, start:1000 }; // 5ml steps
+  // Derived coffee range from ratio: coffee = water*(16/250)
+  const coffeeStep = 0.1;
 
-  const clamp = (x,a,b)=> Math.min(b, Math.max(a,x));
+  const clamp = (x,a,b)=> Math.min(b, Math.max(a, x));
   const roundTo = (x, step)=> Math.round(x/step)*step;
   const fmt1 = (x)=> (Math.round(x*10)/10).toFixed(1);
 
   function buildValues(min, max, step){
     const out = [];
-    const nSteps = Math.round((max - min) / step);
-    for(let i=0;i<=nSteps;i++) out.push(min + i*step);
+    const n = Math.round((max - min) / step);
+    for(let i=0;i<=n;i++) out.push(min + i*step);
     if (Math.abs(out[out.length-1] - max) > step/2) out.push(max);
     return out;
   }
 
-  const waterValues = buildValues(cfg.water.min, cfg.water.max, cfg.water.step);
+  const waterValues = buildValues(waterCfg.min, waterCfg.max, waterCfg.step);
 
-  // derived coffee range from locked ratio
-  const coffeeMin = roundTo((cfg.water.min * R_C) / R_W, cfg.coffeeStep);
-  const coffeeMax = roundTo((cfg.water.max * R_C) / R_W, cfg.coffeeStep);
-  const coffeeValues = buildValues(coffeeMin, coffeeMax, cfg.coffeeStep);
+  const coffeeMin = roundTo((waterCfg.min * R_C) / R_W, coffeeStep);
+  const coffeeMax = roundTo((waterCfg.max * R_C) / R_W, coffeeStep);
+  const coffeeValues = buildValues(coffeeMin, coffeeMax, coffeeStep);
 
-  function populateWheel(wheelEl, values, formatter){
-    wheelEl.innerHTML = "";
-    for (const v of values){
+  const coffeeFromWater = (w)=> roundTo((w * R_C) / R_W, coffeeStep);
+  const waterFromCoffee = (c)=> roundTo((c * R_W) / R_C, waterCfg.step);
+
+  function renderItems(container, values, formatter){
+    container.innerHTML = "";
+    for(const v of values){
       const div = document.createElement("div");
       div.className = "item";
-      div.dataset.value = String(v);
       div.textContent = formatter(v);
-      wheelEl.appendChild(div);
+      container.appendChild(div);
     }
   }
 
-  populateWheel(waterWheel, waterValues, (v)=> String(Math.round(v)));
-  populateWheel(coffeeWheel, coffeeValues, (v)=> fmt1(v));
+  renderItems(document.getElementById("waterItems"), waterValues, v => String(Math.round(v)));
+  renderItems(document.getElementById("coffeeItems"), coffeeValues, v => fmt1(v));
 
-  // Measure real row height for perfect lock (font/device differences)
-  function itemH(wheelEl){
-    const first = wheelEl.querySelector(".item");
-    return first ? first.getBoundingClientRect().height : 56;
-  }
+  class DragWheel {
+    constructor({ wrap, track, values, onChange, formatter }) {
+      this.wrap = wrap;
+      this.track = track;
+      this.values = values;
+      this.onChange = onChange;
 
-  function nearestIndex(wheelEl, values){
-    const h = itemH(wheelEl);
-    const idx = Math.round(wheelEl.scrollTop / h);
-    return clamp(idx, 0, values.length - 1);
-  }
+      this.index = 0;
+      this.offsetY = 0; // in px, track translateY
+      this.dragging = false;
+      this.startY = 0;
+      this.startOffset = 0;
 
-  // INSTANT snap (no animation, no bounce)
-  function snapIndexInstant(wheelEl, idx){
-    const h = itemH(wheelEl);
-    const top = idx * h;
-    wheelEl.scrollTo({ top, behavior: "auto" }); // immediate
-  }
+      this.wrap.style.setProperty("--itemH", ITEM_H + "px");
+      this.wrap.style.setProperty("--visible", VISIBLE);
 
-  function scrollToValueInstant(wheelEl, values, value){
-    // find nearest
-    let bestIdx = 0, best = Infinity;
-    for(let i=0;i<values.length;i++){
-      const d = Math.abs(values[i] - value);
-      if(d < best){ best = d; bestIdx = i; }
+      this.bind();
+      this.snapToIndex(0, false);
     }
-    snapIndexInstant(wheelEl, bestIdx);
-    return bestIdx;
+
+    setIndex(idx, emit=true){
+      const clamped = clamp(idx, 0, this.values.length - 1);
+      this.index = clamped;
+      // offset so that index is centered
+      this.offsetY = -clamped * ITEM_H;
+      this.track.style.transform = `translateY(${this.offsetY}px)`;
+      if (emit) this.onChange?.(this.values[this.index], this.index);
+    }
+
+    snapToNearest(emit=true){
+      // nearest index based on offset
+      const idx = Math.round(-this.offsetY / ITEM_H);
+      this.setIndex(idx, emit);
+    }
+
+    snapToIndex(idx, emit=true){
+      this.setIndex(idx, emit);
+    }
+
+    step(delta){
+      this.setIndex(this.index + delta, true);
+    }
+
+    bind(){
+      const down = (e) => {
+        this.dragging = true;
+        this.wrap.setPointerCapture?.(e.pointerId);
+        this.startY = (e.touches ? e.touches[0].clientY : e.clientY);
+        this.startOffset = this.offsetY;
+      };
+
+      const move = (e) => {
+        if (!this.dragging) return;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY);
+        const dy = y - this.startY;
+
+        // direct drag (no momentum): update offset immediately
+        let next = this.startOffset + dy;
+
+        // clamp offset so you can’t drag beyond ends
+        const minOffset = -(this.values.length - 1) * ITEM_H;
+        const maxOffset = 0;
+        next = clamp(next, minOffset, maxOffset);
+
+        this.offsetY = next;
+        this.track.style.transform = `translateY(${this.offsetY}px)`;
+      };
+
+      const up = () => {
+        if (!this.dragging) return;
+        this.dragging = false;
+        // INSTANT lock: snap immediately, no animation
+        this.snapToNearest(true);
+      };
+
+      // Pointer events (best on Android)
+      this.wrap.addEventListener("pointerdown", down);
+      this.wrap.addEventListener("pointermove", move);
+      this.wrap.addEventListener("pointerup", up);
+      this.wrap.addEventListener("pointercancel", up);
+
+      // Fallback for some browsers
+      this.wrap.addEventListener("touchstart", down, { passive:true });
+      this.wrap.addEventListener("touchmove", move, { passive:true });
+      this.wrap.addEventListener("touchend", up, { passive:true });
+    }
   }
 
-  const coffeeFromWater = (w)=> roundTo((w * R_C) / R_W, cfg.coffeeStep);
-  const waterFromCoffee = (c)=> roundTo((c * R_W) / R_C, cfg.water.step);
+  let updating = false;
+  let lastActive = "water"; // water or coffee
 
-  let active = "water";
+  const waterWheel = new DragWheel({
+    wrap: document.getElementById("waterWrap"),
+    track: document.getElementById("waterTrack"),
+    values: waterValues,
+    onChange: (w) => {
+      if (updating) return;
+      lastActive = "water";
+      updating = true;
+      const c = coffeeFromWater(w);
+      // snap coffee to exact corresponding value
+      const idxC = coffeeValues.indexOf(c);
+      coffeeWheel.snapToIndex(idxC >= 0 ? idxC : 0, true);
+      updating = false;
+    }
+  });
 
-  function settleWaterInstant(){
-    const idxW = nearestIndex(waterWheel, waterValues);
-    snapIndexInstant(waterWheel, idxW);
-    const w = waterValues[idxW];
-    const c = coffeeFromWater(w);
-    scrollToValueInstant(coffeeWheel, coffeeValues, c);
-  }
+  const coffeeWheel = new DragWheel({
+    wrap: document.getElementById("coffeeWrap"),
+    track: document.getElementById("coffeeTrack"),
+    values: coffeeValues,
+    onChange: (c) => {
+      if (updating) return;
+      lastActive = "coffee";
+      updating = true;
+      const w = waterFromCoffee(c);
+      const idxW = waterValues.indexOf(w);
+      waterWheel.snapToIndex(idxW >= 0 ? idxW : 0, true);
+      updating = false;
+    }
+  });
 
-  function settleCoffeeInstant(){
-    const idxC = nearestIndex(coffeeWheel, coffeeValues);
-    snapIndexInstant(coffeeWheel, idxC);
-    const c = coffeeValues[idxC];
-    const w = waterFromCoffee(c);
-    scrollToValueInstant(waterWheel, waterValues, w);
-  }
+  // Buttons
+  document.getElementById("waterDown").onclick = () => waterWheel.step(-1);
+  document.getElementById("waterUp").onclick   = () => waterWheel.step(+1);
+  document.getElementById("coffeeDown").onclick = () => coffeeWheel.step(-1);
+  document.getElementById("coffeeUp").onclick   = () => coffeeWheel.step(+1);
 
-  // Settle on finger release = “no movement after chosen”
-  function bindRelease(wheelEl, which){
-    const settle = () => (which === "water") ? settleWaterInstant() : settleCoffeeInstant();
-    wheelEl.addEventListener("touchend", settle, { passive:true });
-    wheelEl.addEventListener("pointerup", settle, { passive:true });
-    wheelEl.addEventListener("mouseup", settle, { passive:true });
+  // Init to 1000ml => coffee
+  const startW = clamp(waterCfg.start, waterCfg.min, waterCfg.max);
+  const startC = coffeeFromWater(startW);
 
-    // Also: if user flings and scroll keeps going, this catches final stop quickly
-    let t = null;
-    wheelEl.addEventListener("scroll", () => {
-      active = which;
-      if (t) clearTimeout(t);
-      t = setTimeout(() => {
-        if (active === which) settle();
-      }, 70);
-    }, { passive:true });
-  }
+  const idxW = waterValues.indexOf(startW);
+  const idxC = coffeeValues.indexOf(startC);
 
-  bindRelease(waterWheel, "water");
-  bindRelease(coffeeWheel, "coffee");
+  updating = true;
+  waterWheel.snapToIndex(idxW >= 0 ? idxW : 0, false);
+  coffeeWheel.snapToIndex(idxC >= 0 ? idxC : 0, false);
+  updating = false;
 
-  // init
-  function init(){
-    const startW = clamp(cfg.water.start, cfg.water.min, cfg.water.max);
-    const startC = coffeeFromWater(startW);
-
-    // after layout, snap exactly
-    requestAnimationFrame(() => {
-      scrollToValueInstant(waterWheel, waterValues, startW);
-      scrollToValueInstant(coffeeWheel, coffeeValues, startC);
-    });
-  }
-
-  init();
+  // Force sync once
+  waterWheel.onChange?.(waterValues[waterWheel.index], waterWheel.index);
 })();
 </script>
 </body>
