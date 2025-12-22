@@ -3,19 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Coffee Ratio Wheels</title>
+  <title>Coffee Wheels</title>
   <style>
     :root{
-      --bg:#1F1F1F;
+      --bg:#0B0B0B;                 /* darker */
       --fg:#FFFFFF;
-      --muted:rgba(255,255,255,.72);
-      --line:rgba(255,255,255,.22);
-      --line2:rgba(255,255,255,.14);
-      --card:rgba(255,255,255,.04);
+      --line:rgba(255,255,255,.20);
+      --line2:rgba(255,255,255,.12);
+      --card:rgba(255,255,255,.03);
 
       --radius:22px;
-      --itemH:48px;     /* row height */
-      --visible:5;      /* must be odd */
+      --visible:5;                  /* must be odd */
+      --itemH:52px;                 /* visual target; JS measures real height */
     }
 
     *{ box-sizing:border-box; }
@@ -24,8 +23,7 @@
       margin:0;
       background:var(--bg);
       color:var(--fg);
-      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-      letter-spacing: 0.2px;
+      font-family: ui-rounded, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       display:flex;
       align-items:center;
       justify-content:center;
@@ -33,9 +31,7 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    .wrap{
-      width:min(760px, 100%);
-    }
+    .wrap{ width:min(760px, 100%); }
 
     .grid{
       display:grid;
@@ -52,10 +48,11 @@
 
     .title{
       text-align:center;
-      font-weight: 600;
-      font-size: 15px;
-      color: var(--muted);
-      margin: 2px 0 12px;
+      font-weight: 650;
+      font-size: 16px;
+      letter-spacing: .2px;
+      margin: 4px 0 12px;
+      color: rgba(255,255,255,.92);
     }
 
     .wheelWrap{
@@ -64,11 +61,10 @@
       border-radius: 18px;
       overflow:hidden;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
+      background: rgba(255,255,255,.02);
       touch-action: pan-y;
     }
 
-    /* Center selection highlight */
     .wheelWrap::before{
       content:"";
       position:absolute;
@@ -82,16 +78,15 @@
       pointer-events:none;
     }
 
-    /* Fade top/bottom */
     .wheelWrap::after{
       content:"";
       position:absolute;
       inset:0;
       background: linear-gradient(to bottom,
-        rgba(31,31,31,0.95) 0%,
-        rgba(31,31,31,0.00) 26%,
-        rgba(31,31,31,0.00) 74%,
-        rgba(31,31,31,0.95) 100%);
+        rgba(11,11,11,0.98) 0%,
+        rgba(11,11,11,0.00) 26%,
+        rgba(11,11,11,0.00) 74%,
+        rgba(11,11,11,0.98) 100%);
       z-index:2;
       pointer-events:none;
     }
@@ -100,6 +95,7 @@
       height:100%;
       overflow-y:auto;
       scroll-snap-type: y mandatory;
+      scroll-snap-stop: always;
       -webkit-overflow-scrolling: touch;
       padding: calc((var(--visible) / 2) * var(--itemH)) 10px;
       scrollbar-width:none;
@@ -111,25 +107,17 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size: 34px;
-      font-weight: 600;
+      font-size: 36px;
+      font-weight: 700;
       color: var(--fg);
       font-variant-numeric: tabular-nums;
       scroll-snap-align: center;
       user-select:none;
     }
 
-    .sub{
-      text-align:center;
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.35;
-    }
-
     @media (max-width: 520px){
       .grid{ grid-template-columns: 1fr; }
-      .item{ font-size: 36px; }
+      .item{ font-size: 38px; }
     }
   </style>
 </head>
@@ -141,7 +129,6 @@
         <div class="wheelWrap">
           <div id="coffeeWheel" class="wheel" aria-label="Coffee wheel"></div>
         </div>
-        <div class="sub">Locked ratio: 16 / 250</div>
       </div>
 
       <div class="panel">
@@ -149,7 +136,6 @@
         <div class="wheelWrap">
           <div id="waterWheel" class="wheel" aria-label="Water wheel"></div>
         </div>
-        <div class="sub">Water range: 150–1000 ml</div>
       </div>
     </div>
   </div>
@@ -160,40 +146,33 @@
   const R_C = 16;
   const R_W = 250;
 
-  // Wheel config
   const cfg = {
     visible: 5,
-    itemH: 48,
-
-    water: { min: 150, max: 1000, step: 1, start: 250 },   // 150–1000 ml, 1 ml increments
-    coffee:{ min: 1.0, max: 100.0, step: 0.1, start: 16.0 } // displayed wheel values; updated from ratio
+    water: { min: 150, max: 1000, step: 1, start: 250 }, // 150–1000 ml
+    coffeeStep: 0.1                                     // 0.1g
   };
 
   const coffeeWheel = document.getElementById("coffeeWheel");
   const waterWheel  = document.getElementById("waterWheel");
 
-  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
-  const roundTo = (x, step) => Math.round(x / step) * step;
-  const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
+  const clamp = (x,a,b)=> Math.min(b, Math.max(a,x));
+  const roundTo = (x, step)=> Math.round(x/step)*step;
+  const fmt1 = (x)=> (Math.round(x*10)/10).toFixed(1);
 
   function buildValues(min, max, step){
     const out = [];
     const nSteps = Math.round((max - min) / step);
-    for(let i=0;i<=nSteps;i++){
-      out.push(min + i * step);
-    }
-    // Ensure exact max if floating quirks
-    if (Math.abs(out[out.length - 1] - max) > step/2) out.push(max);
+    for(let i=0;i<=nSteps;i++) out.push(min + i*step);
+    if (Math.abs(out[out.length-1] - max) > step/2) out.push(max);
     return out;
   }
 
   const waterValues = buildValues(cfg.water.min, cfg.water.max, cfg.water.step);
 
-  // Coffee values should cover whatever water produces:
-  // coffee = water * 16/250 -> for 150..1000 gives 9.6..64.0
-  const coffeeMin = roundTo((cfg.water.min * R_C) / R_W, cfg.coffee.step);
-  const coffeeMax = roundTo((cfg.water.max * R_C) / R_W, cfg.coffee.step);
-  const coffeeValues = buildValues(coffeeMin, coffeeMax, cfg.coffee.step);
+  // coffee range derived from water range under locked ratio
+  const coffeeMin = roundTo((cfg.water.min * R_C) / R_W, cfg.coffeeStep);
+  const coffeeMax = roundTo((cfg.water.max * R_C) / R_W, cfg.coffeeStep);
+  const coffeeValues = buildValues(coffeeMin, coffeeMax, cfg.coffeeStep);
 
   function populateWheel(wheelEl, values, formatter){
     wheelEl.innerHTML = "";
@@ -209,23 +188,20 @@
   populateWheel(waterWheel, waterValues, (v)=> String(Math.round(v)));
   populateWheel(coffeeWheel, coffeeValues, (v)=> fmt1(v));
 
-  // --- Accurate snapping + bounce animation
-  function nearestIndexByScrollTop(wheelEl, values){
-    const raw = wheelEl.scrollTop / cfg.itemH;
-    const idx = clamp(Math.round(raw), 0, values.length - 1);
-    return idx;
+  // Measure REAL item height (fixes “won’t lock” issue on some phones)
+  function getItemH(wheelEl){
+    const first = wheelEl.querySelector(".item");
+    return first ? first.getBoundingClientRect().height : 52;
   }
 
-  function animateScrollTo(wheelEl, targetTop, { duration=170, bounce=true } = {}){
+  function animateScrollTo(wheelEl, targetTop, { duration=160, bounce=true } = {}){
     const startTop = wheelEl.scrollTop;
     const delta = targetTop - startTop;
-    if (Math.abs(delta) < 0.5) return;
+    if (Math.abs(delta) < 0.5) { wheelEl.scrollTop = targetTop; return; }
 
     const start = performance.now();
+    const easeOutCubic = (t)=> 1 - Math.pow(1 - t, 3);
 
-    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-
-    // Small overshoot for bounce (subtle, not annoying)
     const overshoot = bounce ? clamp(delta * 0.06, -14, 14) : 0;
     const overshootTop = targetTop + overshoot;
 
@@ -233,7 +209,6 @@
       const t = clamp((now - start) / duration, 0, 1);
       const e = easeOutCubic(t);
 
-      // 2-phase: go to overshoot, then return to target
       if (bounce && t < 0.82){
         wheelEl.scrollTop = startTop + (overshootTop - startTop) * (e / 0.82);
       } else if (bounce){
@@ -250,89 +225,92 @@
     requestAnimationFrame(step);
   }
 
-  function snapToIndex(wheelEl, idx, { bounce=true } = {}){
-    const top = idx * cfg.itemH;
-    animateScrollTo(wheelEl, top, { duration: 180, bounce });
+  function nearestIndex(wheelEl, values){
+    const itemH = getItemH(wheelEl);
+    const idx = Math.round(wheelEl.scrollTop / itemH);
+    return clamp(idx, 0, values.length - 1);
+  }
+
+  function snapIndex(wheelEl, idx, { bounce=true } = {}){
+    const itemH = getItemH(wheelEl);
+    const top = idx * itemH;
+    animateScrollTo(wheelEl, top, { duration: 170, bounce });
   }
 
   function scrollToValue(wheelEl, values, value, { bounce=true } = {}){
-    // Find closest index (values are dense; binary search optional, linear ok here)
-    let bestIdx = 0;
-    let best = Infinity;
+    // nearest value index (dense lists, linear is fine here)
+    let bestIdx = 0, best = Infinity;
     for(let i=0;i<values.length;i++){
       const d = Math.abs(values[i] - value);
       if(d < best){ best = d; bestIdx = i; }
     }
-    snapToIndex(wheelEl, bestIdx, { bounce });
+    snapIndex(wheelEl, bestIdx, { bounce });
     return bestIdx;
   }
 
-  // Locked-ratio conversions (snapped to step)
-  function coffeeFromWater(w){
-    const c = (w * R_C) / R_W;
-    return roundTo(c, cfg.coffee.step);
-  }
+  // ratio conversions
+  const coffeeFromWater = (w)=> roundTo((w * R_C) / R_W, cfg.coffeeStep);
+  const waterFromCoffee = (c)=> roundTo((c * R_W) / R_C, cfg.water.step);
 
-  function waterFromCoffee(c){
-    const w = (c * R_W) / R_C;
-    return roundTo(w, cfg.water.step);
-  }
-
-  let active = "water"; // which wheel user last interacted with
-  let timerW = null, timerC = null;
+  let active = "water";
+  let settleTimerW = null, settleTimerC = null;
+  const SETTLE_MS = 80;
 
   function settleWater(){
-    const idxW = nearestIndexByScrollTop(waterWheel, waterValues);
-    snapToIndex(waterWheel, idxW, { bounce:true });
-
+    const idxW = nearestIndex(waterWheel, waterValues);
+    snapIndex(waterWheel, idxW, { bounce:true });
     const w = waterValues[idxW];
     const c = coffeeFromWater(w);
     scrollToValue(coffeeWheel, coffeeValues, c, { bounce:true });
   }
 
   function settleCoffee(){
-    const idxC = nearestIndexByScrollTop(coffeeWheel, coffeeValues);
-    snapToIndex(coffeeWheel, idxC, { bounce:true });
-
+    const idxC = nearestIndex(coffeeWheel, coffeeValues);
+    snapIndex(coffeeWheel, idxC, { bounce:true });
     const c = coffeeValues[idxC];
     const w = waterFromCoffee(c);
     scrollToValue(waterWheel, waterValues, w, { bounce:true });
   }
 
-  // Scroll-end detection tuned for accuracy
-  const SETTLE_MS = 85;
-
+  // scroll handlers (light debounce)
   waterWheel.addEventListener("scroll", () => {
     active = "water";
-    if (timerW) clearTimeout(timerW);
-    timerW = setTimeout(() => {
-      if (active === "water") settleWater();
-    }, SETTLE_MS);
+    if (settleTimerW) clearTimeout(settleTimerW);
+    settleTimerW = setTimeout(() => { if(active==="water") settleWater(); }, SETTLE_MS);
   }, { passive:true });
 
   coffeeWheel.addEventListener("scroll", () => {
     active = "coffee";
-    if (timerC) clearTimeout(timerC);
-    timerC = setTimeout(() => {
-      if (active === "coffee") settleCoffee();
-    }, SETTLE_MS);
+    if (settleTimerC) clearTimeout(settleTimerC);
+    settleTimerC = setTimeout(() => { if(active==="coffee") settleCoffee(); }, SETTLE_MS);
   }, { passive:true });
 
-  // Initial: start at 250ml -> 16.0g
+  // IMPORTANT: lock-in on finger release for perfect snapping
+  function bindReleaseSnap(wheelEl, which){
+    const doSettle = () => (which === "water") ? settleWater() : settleCoffee();
+    wheelEl.addEventListener("touchend", doSettle, { passive:true });
+    wheelEl.addEventListener("mouseup", doSettle, { passive:true });
+    wheelEl.addEventListener("pointerup", doSettle, { passive:true });
+  }
+  bindReleaseSnap(waterWheel, "water");
+  bindReleaseSnap(coffeeWheel, "coffee");
+
+  // init at 250 ml => 16.0 g
   function init(){
     const startW = clamp(cfg.water.start, cfg.water.min, cfg.water.max);
     const startC = coffeeFromWater(startW);
 
-    // No bounce on init
     scrollToValue(waterWheel, waterValues, startW, { bounce:false });
     scrollToValue(coffeeWheel, coffeeValues, startC, { bounce:false });
 
-    // Force exact after first paint
+    // force exact alignment after layout
     requestAnimationFrame(() => {
+      const itemHW = getItemH(waterWheel);
+      const itemHC = getItemH(coffeeWheel);
       const idxW = waterValues.indexOf(startW);
-      if (idxW >= 0) waterWheel.scrollTop = idxW * cfg.itemH;
       const idxC = coffeeValues.indexOf(startC);
-      if (idxC >= 0) coffeeWheel.scrollTop = idxC * cfg.itemH;
+      if (idxW >= 0) waterWheel.scrollTop = idxW * itemHW;
+      if (idxC >= 0) coffeeWheel.scrollTop = idxC * itemHC;
     });
   }
 
