@@ -9,7 +9,6 @@
       --bg:#050505;
       --fg:#fff;
       --line:rgba(255,255,255,.22);
-      --line2:rgba(255,255,255,.14);
       --card:rgba(255,255,255,.03);
 
       --radius:22px;
@@ -62,11 +61,11 @@
       overflow:hidden;
       border:1px solid var(--line);
       background: rgba(255,255,255,.02);
-      touch-action: none; /* IMPORTANT: we handle dragging ourselves */
+      touch-action: none; /* we handle dragging */
       user-select:none;
     }
 
-    /* center selection highlight */
+    /* Center selection highlight */
     .wheelWrap::before{
       content:"";
       position:absolute;
@@ -80,7 +79,7 @@
       pointer-events:none;
     }
 
-    /* fade top/bottom */
+    /* Fade top/bottom */
     .wheelWrap::after{
       content:"";
       position:absolute;
@@ -97,16 +96,19 @@
     .track{
       position:absolute;
       inset:0;
-      display:flex;
-      align-items:flex-start;
-      justify-content:center;
       z-index:1;
       will-change: transform;
+      /* smoother visual motion */
+      transition: transform 0ms;
     }
 
+    /* IMPORTANT: we add top padding INSIDE the list so the selected row can sit in the center */
     .items{
       width:100%;
-      padding: calc((var(--visible) / 2) * var(--itemH)) 10px;
+      padding-top: calc((var(--visible) / 2) * var(--itemH));
+      padding-bottom: calc((var(--visible) / 2) * var(--itemH));
+      padding-left: 10px;
+      padding-right: 10px;
     }
 
     .item{
@@ -138,7 +140,6 @@
       font-weight: 700;
       line-height: 1;
     }
-
     .btn:active{ transform: scale(0.99); }
 
     @media (max-width: 520px){
@@ -184,11 +185,14 @@
   const R_C = 16;
   const R_W = 250;
 
-  const ITEM_H = 56;         // must match CSS --itemH
-  const VISIBLE = 5;
+  const ITEM_H = 56;   // must match CSS --itemH
+  const VISIBLE = 5;   // must match CSS --visible
+  const CENTER_PAD = (VISIBLE / 2) * ITEM_H; // 2.5 * 56 => 140, but we use padding in CSS (2 * 56) effectively
+  // We'll compute center padding precisely using integer rows:
+  const CENTER_ROWS = Math.floor(VISIBLE / 2); // 2 for visible=5
+  const CENTER_PX = CENTER_ROWS * ITEM_H;      // 112
 
-  const waterCfg = { min:150, max:1000, step:5, start:1000 }; // 5ml steps
-  // Derived coffee range from ratio: coffee = water*(16/250)
+  const waterCfg = { min:150, max:1000, step:5, start:1000 };
   const coffeeStep = 0.1;
 
   const clamp = (x,a,b)=> Math.min(b, Math.max(a, x));
@@ -226,36 +230,44 @@
   renderItems(document.getElementById("coffeeItems"), coffeeValues, v => fmt1(v));
 
   class DragWheel {
-    constructor({ wrap, track, values, onChange, formatter }) {
+    constructor({ wrap, track, values, onChange }) {
       this.wrap = wrap;
       this.track = track;
       this.values = values;
       this.onChange = onChange;
 
       this.index = 0;
-      this.offsetY = 0; // in px, track translateY
+
+      // offsetY is translation applied to track
+      // With padding-top inside items, CENTER is at translateY = -(index*ITEM_H)
+      this.offsetY = 0;
+
+      // fluid drag uses a "soft follow" (low-pass filter)
       this.dragging = false;
       this.startY = 0;
       this.startOffset = 0;
 
-      this.wrap.style.setProperty("--itemH", ITEM_H + "px");
-      this.wrap.style.setProperty("--visible", VISIBLE);
+      this.targetOffset = 0;
+      this.raf = null;
 
       this.bind();
       this.snapToIndex(0, false);
     }
 
+    applyTransform(){
+      this.track.style.transform = `translateY(${this.offsetY}px)`;
+    }
+
     setIndex(idx, emit=true){
       const clamped = clamp(idx, 0, this.values.length - 1);
       this.index = clamped;
-      // offset so that index is centered
-      this.offsetY = -clamped * ITEM_H;
-      this.track.style.transform = `translateY(${this.offsetY}px)`;
+      this.offsetY = -(clamped * ITEM_H);
+      this.targetOffset = this.offsetY;
+      this.applyTransform();
       if (emit) this.onChange?.(this.values[this.index], this.index);
     }
 
     snapToNearest(emit=true){
-      // nearest index based on offset
       const idx = Math.round(-this.offsetY / ITEM_H);
       this.setIndex(idx, emit);
     }
@@ -268,12 +280,32 @@
       this.setIndex(this.index + delta, true);
     }
 
+    // Smooth following while dragging (but still deterministic)
+    startRAF(){
+      if (this.raf) return;
+      const tick = () => {
+        // critically damped-ish: move 35% toward target each frame
+        const diff = this.targetOffset - this.offsetY;
+        this.offsetY += diff * 0.35;
+        if (Math.abs(diff) < 0.2) {
+          this.offsetY = this.targetOffset;
+          this.applyTransform();
+          this.raf = null;
+          return;
+        }
+        this.applyTransform();
+        this.raf = requestAnimationFrame(tick);
+      };
+      this.raf = requestAnimationFrame(tick);
+    }
+
     bind(){
       const down = (e) => {
         this.dragging = true;
         this.wrap.setPointerCapture?.(e.pointerId);
-        this.startY = (e.touches ? e.touches[0].clientY : e.clientY);
-        this.startOffset = this.offsetY;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY);
+        this.startY = y;
+        this.startOffset = this.targetOffset; // use target for continuity
       };
 
       const move = (e) => {
@@ -281,32 +313,32 @@
         const y = (e.touches ? e.touches[0].clientY : e.clientY);
         const dy = y - this.startY;
 
-        // direct drag (no momentum): update offset immediately
-        let next = this.startOffset + dy;
+        // direct mapping, clamped. No inertia.
+        let nextTarget = this.startOffset + dy;
 
-        // clamp offset so you can’t drag beyond ends
-        const minOffset = -(this.values.length - 1) * ITEM_H;
+        const minOffset = -((this.values.length - 1) * ITEM_H);
         const maxOffset = 0;
-        next = clamp(next, minOffset, maxOffset);
+        nextTarget = clamp(nextTarget, minOffset, maxOffset);
 
-        this.offsetY = next;
-        this.track.style.transform = `translateY(${this.offsetY}px)`;
+        this.targetOffset = nextTarget;
+        this.startRAF(); // makes it feel fluid
       };
 
       const up = () => {
         if (!this.dragging) return;
         this.dragging = false;
-        // INSTANT lock: snap immediately, no animation
-        this.snapToNearest(true);
+
+        // lock instantly to the exact center row
+        const idx = Math.round(-this.targetOffset / ITEM_H);
+        this.setIndex(idx, true);
       };
 
-      // Pointer events (best on Android)
       this.wrap.addEventListener("pointerdown", down);
       this.wrap.addEventListener("pointermove", move);
       this.wrap.addEventListener("pointerup", up);
       this.wrap.addEventListener("pointercancel", up);
 
-      // Fallback for some browsers
+      // fallback
       this.wrap.addEventListener("touchstart", down, { passive:true });
       this.wrap.addEventListener("touchmove", move, { passive:true });
       this.wrap.addEventListener("touchend", up, { passive:true });
@@ -314,7 +346,6 @@
   }
 
   let updating = false;
-  let lastActive = "water"; // water or coffee
 
   const waterWheel = new DragWheel({
     wrap: document.getElementById("waterWrap"),
@@ -322,10 +353,8 @@
     values: waterValues,
     onChange: (w) => {
       if (updating) return;
-      lastActive = "water";
       updating = true;
       const c = coffeeFromWater(w);
-      // snap coffee to exact corresponding value
       const idxC = coffeeValues.indexOf(c);
       coffeeWheel.snapToIndex(idxC >= 0 ? idxC : 0, true);
       updating = false;
@@ -338,7 +367,6 @@
     values: coffeeValues,
     onChange: (c) => {
       if (updating) return;
-      lastActive = "coffee";
       updating = true;
       const w = waterFromCoffee(c);
       const idxW = waterValues.indexOf(w);
@@ -353,7 +381,7 @@
   document.getElementById("coffeeDown").onclick = () => coffeeWheel.step(-1);
   document.getElementById("coffeeUp").onclick   = () => coffeeWheel.step(+1);
 
-  // Init to 1000ml => coffee
+  // Init: 1000ml => 64.0g
   const startW = clamp(waterCfg.start, waterCfg.min, waterCfg.max);
   const startC = coffeeFromWater(startW);
 
@@ -365,7 +393,7 @@
   coffeeWheel.snapToIndex(idxC >= 0 ? idxC : 0, false);
   updating = false;
 
-  // Force sync once
+  // ensure sync
   waterWheel.onChange?.(waterValues[waterWheel.index], waterWheel.index);
 })();
 </script>
