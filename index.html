@@ -6,25 +6,27 @@
   <title>16-bit Coffee Wheels</title>
   <style>
     :root{
-      --bg:#030303;
-      --fg:#F8F8F8;
+      --bg:#020202;
+      --fg:#F7F7F7;
 
-      --ui1:#0A0A0A;
-      --ui2:#101010;
-      --line:#F8F8F8;
-      --line2:rgba(248,248,248,.45);
-      --glow:rgba(248,248,248,.25);
+      --panel1:#070707;
+      --panel2:#0D0D0D;
 
-      --radius:0px;             /* pixel style */
+      --line:#F7F7F7;
+      --lineDim:rgba(247,247,247,.28);
+
+      --red:#3A0000;      /* dark red box fill */
+      --red2:#5A0000;     /* red inner border glow */
+      --shadow:#000;
+
       --itemH:56px;
-      --visible:5;              /* odd */
+      --visible:5;        /* odd */
       --padX:14px;
-      --boxInset:10px;
+      --inset:10px;
     }
 
     *{ box-sizing:border-box; }
     html, body{ height:100%; }
-
     body{
       margin:0;
       background: var(--bg);
@@ -36,46 +38,80 @@
       padding:18px;
       -webkit-tap-highlight-color: transparent;
       image-rendering: pixelated;
+      overflow:hidden;
     }
 
-    /* subtle scanlines */
-    body::before{
+    /* CRT scanlines + flicker + vignette */
+    .crt::before{
+      content:"";
+      position:fixed;
+      inset:-20%;
+      pointer-events:none;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          rgba(255,255,255,0.05) 0px,
+          rgba(255,255,255,0.05) 1px,
+          rgba(0,0,0,0.00) 3px,
+          rgba(0,0,0,0.00) 6px
+        );
+      opacity:.22;
+      mix-blend-mode: overlay;
+      animation: scan 2.8s linear infinite;
+    }
+    .crt::after{
       content:"";
       position:fixed;
       inset:0;
       pointer-events:none;
-      background: repeating-linear-gradient(
-        to bottom,
-        rgba(255,255,255,0.03) 0px,
-        rgba(255,255,255,0.03) 1px,
-        rgba(0,0,0,0.00) 3px,
-        rgba(0,0,0,0.00) 6px
-      );
-      mix-blend-mode: overlay;
-      opacity:.25;
+      background:
+        radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.35) 100%);
+      animation: flicker 3.5s infinite steps(1,end);
+      opacity:.9;
+    }
+    @keyframes scan{
+      0%{ transform: translateY(0px); }
+      100%{ transform: translateY(18px); }
+    }
+    @keyframes flicker{
+      0%, 100%{ filter: brightness(1); }
+      10%{ filter: brightness(.98); }
+      20%{ filter: brightness(1.02); }
+      30%{ filter: brightness(.99); }
+      40%{ filter: brightness(1.01); }
+      50%{ filter: brightness(1.00); }
+      60%{ filter: brightness(.985); }
+      70%{ filter: brightness(1.02); }
+      80%{ filter: brightness(.99); }
+      90%{ filter: brightness(1.01); }
     }
 
-    .wrap{ width:min(820px, 100%); }
-
+    .wrap{ width:min(860px, 100%); }
     .grid{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap:14px;
     }
 
-    /* 16-bit panel */
+    /* Pixel panel with notches */
     .panel{
-      background:
-        linear-gradient(180deg, var(--ui2), var(--ui1));
-      padding: 14px;
       position:relative;
-
-      /* pixel border */
+      padding: 14px;
+      background: linear-gradient(180deg, var(--panel2), var(--panel1));
       box-shadow:
         0 0 0 2px var(--line),
-        0 0 0 4px rgba(255,255,255,.10),
-        0 10px 24px rgba(0,0,0,.55);
+        0 0 0 6px rgba(255,255,255,.08),
+        0 16px 34px rgba(0,0,0,.65);
     }
+    .panel:before, .panel:after{
+      content:"";
+      position:absolute;
+      width:10px; height:10px;
+      background: var(--bg);
+      box-shadow: 0 0 0 2px var(--line);
+    }
+    .panel:before{ top:-2px; left:-2px; }
+    .panel:after{ bottom:-2px; right:-2px; }
 
     .title{
       text-align:center;
@@ -84,7 +120,7 @@
       letter-spacing: 1px;
       text-transform: uppercase;
       margin: 2px 0 12px;
-      text-shadow: 0 2px 0 rgba(0,0,0,.65);
+      text-shadow: 0 2px 0 rgba(0,0,0,.8);
     }
 
     .wheelWrap{
@@ -92,46 +128,61 @@
       height: calc(var(--itemH) * var(--visible));
       overflow:hidden;
       background: #050505;
+      touch-action: none;
+      user-select:none;
 
-      /* inner pixel border */
       box-shadow:
         inset 0 0 0 2px var(--line),
-        inset 0 0 0 4px rgba(255,255,255,.08);
-      touch-action: none; /* we handle dragging */
-      user-select:none;
+        inset 0 0 0 6px rgba(255,255,255,.07);
     }
 
-    /* THE selection "box" (middle) */
-    .wheelWrap::before{
-      content:"";
+    /* red selection box overlay */
+    .selectBox{
       position:absolute;
-      left: var(--boxInset);
-      right: var(--boxInset);
+      left: var(--inset);
+      right: var(--inset);
       top: calc((var(--visible) / 2) * var(--itemH) - (var(--itemH) / 2));
       height: var(--itemH);
+      z-index: 5;
+      display:flex;
+      align-items:center;
+      justify-content:center;
 
-      /* pixel box */
+      background: linear-gradient(180deg, #2A0000, var(--red));
       box-shadow:
         inset 0 0 0 2px var(--line),
-        inset 0 0 0 4px rgba(0,0,0,.55),
-        0 0 18px var(--glow);
-      background: rgba(255,255,255,.06);
-      z-index: 3;
-      pointer-events:none;
+        inset 0 0 0 6px rgba(0,0,0,.55),
+        0 0 0 2px rgba(0,0,0,.35),
+        0 0 18px rgba(255,0,0,.18);
     }
 
-    /* top/bottom fade to emphasize center */
-    .wheelWrap::after{
-      content:"";
+    .selectedText{
+      font-size: 40px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: var(--fg);
+      text-shadow:
+        0 3px 0 rgba(0,0,0,.85),
+        0 0 10px rgba(255,255,255,.10);
+      /* subtle 16-bit shimmer */
+      animation: shimmer 1.6s steps(2,end) infinite;
+    }
+    @keyframes shimmer{
+      0%, 100%{ filter: brightness(1); transform: translateY(0px); }
+      50%{ filter: brightness(1.08); transform: translateY(-1px); }
+    }
+
+    /* fade top/bottom */
+    .wheelWrap .fade{
       position:absolute;
       inset:0;
-      background: linear-gradient(to bottom,
-        rgba(3,3,3,0.98) 0%,
-        rgba(3,3,3,0.00) 28%,
-        rgba(3,3,3,0.00) 72%,
-        rgba(3,3,3,0.98) 100%);
-      z-index:2;
+      z-index:4;
       pointer-events:none;
+      background: linear-gradient(to bottom,
+        rgba(2,2,2,0.98) 0%,
+        rgba(2,2,2,0.00) 28%,
+        rgba(2,2,2,0.00) 72%,
+        rgba(2,2,2,0.98) 100%);
     }
 
     .track{
@@ -142,7 +193,6 @@
       transform: translateY(0px);
     }
 
-    /* padding so the selected row sits inside the selection box */
     .items{
       width:100%;
       padding-top: calc((var(--visible) / 2) * var(--itemH));
@@ -156,26 +206,19 @@
       display:flex;
       align-items:center;
       justify-content:center;
-
-      font-size: 38px;
+      font-size: 34px;
       font-weight: 900;
-      letter-spacing: 0.5px;
+      letter-spacing: .5px;
       font-variant-numeric: tabular-nums;
-      text-shadow:
-        0 2px 0 rgba(0,0,0,.75),
-        0 0 10px rgba(255,255,255,.08);
-      opacity: .68;
+      color: rgba(247,247,247,.55);
+      text-shadow: 0 2px 0 rgba(0,0,0,.75);
     }
-
-    /* Make the center row look "selected" by letting it naturally sit under the box:
-       we don't need per-row detection; the box itself creates the effect. */
 
     .controls{
       display:flex;
       gap:10px;
       margin-top:12px;
     }
-
     .btn{
       flex:1;
       border:0;
@@ -186,28 +229,28 @@
       letter-spacing: 1px;
       padding: 12px 10px;
       font-size: 18px;
-
       box-shadow:
         0 0 0 2px var(--line),
         inset 0 0 0 2px rgba(0,0,0,.55),
-        0 8px 0 rgba(0,0,0,.55);
+        0 8px 0 rgba(0,0,0,.60);
     }
     .btn:active{
       transform: translateY(6px);
       box-shadow:
         0 0 0 2px var(--line),
         inset 0 0 0 2px rgba(0,0,0,.55),
-        0 2px 0 rgba(0,0,0,.55);
+        0 2px 0 rgba(0,0,0,.60);
     }
 
     @media (max-width: 520px){
       .grid{ grid-template-columns: 1fr; }
-      .item{ font-size: 40px; }
+      .selectedText{ font-size: 42px; }
+      .item{ font-size: 36px; }
     }
   </style>
 </head>
 
-<body>
+<body class="crt">
   <div class="wrap">
     <div class="grid">
       <div class="panel">
@@ -216,6 +259,10 @@
           <div class="track" id="coffeeTrack">
             <div class="items" id="coffeeItems"></div>
           </div>
+
+          <!-- Selected value ALWAYS inside the box -->
+          <div class="selectBox"><div class="selectedText" id="coffeeSelected">16.0</div></div>
+          <div class="fade"></div>
         </div>
         <div class="controls">
           <button class="btn" id="coffeeDown" type="button">▼</button>
@@ -229,6 +276,9 @@
           <div class="track" id="waterTrack">
             <div class="items" id="waterItems"></div>
           </div>
+
+          <div class="selectBox"><div class="selectedText" id="waterSelected">1000</div></div>
+          <div class="fade"></div>
         </div>
         <div class="controls">
           <button class="btn" id="waterDown" type="button">▼</button>
@@ -243,8 +293,8 @@
   // LOCKED ratio: 16 / 250
   const R_C = 16, R_W = 250;
 
-  const ITEM_H = 56;   // must match CSS --itemH
-  const VISIBLE = 5;   // must match CSS --visible
+  const ITEM_H = 56;         // must match CSS --itemH
+  const VISIBLE = 5;
 
   // Requested accuracy
   const waterCfg = { min:150, max:1000, step:5, start:1000 };
@@ -264,7 +314,7 @@
 
   const waterValues = buildValues(waterCfg.min, waterCfg.max, waterCfg.step);
 
-  // Derived coffee range from water range under locked ratio
+  // Derived coffee range from locked ratio
   const coffeeMin = roundTo((waterCfg.min * R_C) / R_W, coffeeStep);
   const coffeeMax = roundTo((waterCfg.max * R_C) / R_W, coffeeStep);
   const coffeeValues = buildValues(coffeeMin, coffeeMax, coffeeStep);
@@ -285,26 +335,31 @@
   renderItems(document.getElementById("waterItems"),  waterValues,  v => String(Math.round(v)));
   renderItems(document.getElementById("coffeeItems"), coffeeValues, v => fmt1(v));
 
-  // Fast + smooth: spring follow while dragging, very quick snap on release.
+  const waterSelected  = document.getElementById("waterSelected");
+  const coffeeSelected = document.getElementById("coffeeSelected");
+
+  // Faster + smoother: higher follow gain + short snap time.
   class DragWheel {
-    constructor({ wrap, track, values, onChange }) {
+    constructor({ wrap, track, values, onChange, setSelectedText }) {
       this.wrap = wrap;
       this.track = track;
       this.values = values;
       this.onChange = onChange;
+      this.setSelectedText = setSelectedText;
 
       this.index = 0;
 
-      // offset is translateY
-      this.offset = 0;
-      this.target = 0;
+      // We place the selected row at the center box by offsetting by CENTER_PX:
+      // translateY = CENTER_PX - index*ITEM_H (+ drag delta)
+      this.CENTER_PX = Math.floor(VISIBLE / 2) * ITEM_H;
 
-      // drag state
+      this.offset = this.CENTER_PX; // current translateY
+      this.target = this.CENTER_PX; // target translateY
+
       this.dragging = false;
       this.startY = 0;
       this.startTarget = 0;
 
-      // animation
       this.raf = null;
       this.snapRaf = null;
 
@@ -312,29 +367,28 @@
       this.bind();
     }
 
-    apply(){
-      this.track.style.transform = `translateY(${this.offset}px)`;
-    }
+    apply(){ this.track.style.transform = `translateY(${this.offset}px)`; }
 
     setIndex(idx, emit=true){
       const i = clamp(idx, 0, this.values.length - 1);
       this.index = i;
-      this.offset = -(i * ITEM_H);
-      this.target = this.offset;
+      this.target = this.CENTER_PX - (i * ITEM_H);
+      this.offset = this.target;
       this.apply();
-      if (emit) this.onChange?.(this.values[this.index], this.index);
+      const v = this.values[this.index];
+      this.setSelectedText?.(v);
+      if (emit) this.onChange?.(v, i);
     }
 
-    // Smooth follow: faster + smoother
     startFollow(){
       if (this.raf) return;
       const tick = () => {
-        // Higher factor = faster response (fluid & snappy)
-        const k = this.dragging ? 0.55 : 0.35;
+        // higher = faster / smoother
+        const k = this.dragging ? 0.70 : 0.45;
         const diff = this.target - this.offset;
         this.offset += diff * k;
 
-        if (Math.abs(diff) < 0.15) {
+        if (Math.abs(diff) < 0.12) {
           this.offset = this.target;
           this.apply();
           this.raf = null;
@@ -346,21 +400,19 @@
       this.raf = requestAnimationFrame(tick);
     }
 
-    // Quick snap (no floaty movement after release)
     snapToNearestFast(emit=true){
-      const idx = Math.round(-this.target / ITEM_H);
+      // Convert translateY back to index:
+      // target = CENTER_PX - index*ITEM_H => index = (CENTER_PX - target)/ITEM_H
+      const idx = Math.round((this.CENTER_PX - this.target) / ITEM_H);
       const i = clamp(idx, 0, this.values.length - 1);
-      const snapTarget = -(i * ITEM_H);
-
-      // Tiny, fast ease-out (looks smooth, ends immediately)
+      const end = this.CENTER_PX - (i * ITEM_H);
       const start = this.offset;
-      const end = snapTarget;
-      const dur = 90; // ms
+
+      const dur = 80; // ms (fast snap)
       const t0 = performance.now();
+      const easeOut = (t)=> 1 - Math.pow(1 - t, 3);
 
       if (this.snapRaf) cancelAnimationFrame(this.snapRaf);
-
-      const easeOut = (t)=> 1 - Math.pow(1 - t, 3);
 
       const step = (now) => {
         const t = clamp((now - t0) / dur, 0, 1);
@@ -373,7 +425,7 @@
           this.snapRaf = requestAnimationFrame(step);
         } else {
           this.snapRaf = null;
-          this.setIndex(i, emit); // lock exact
+          this.setIndex(i, emit); // lock exact + update box text
         }
       };
       this.snapRaf = requestAnimationFrame(step);
@@ -384,8 +436,9 @@
     }
 
     bind(){
-      const minOffset = -((this.values.length - 1) * ITEM_H);
-      const maxOffset = 0;
+      // min/max translateY bounds
+      const minT = this.CENTER_PX - ((this.values.length - 1) * ITEM_H);
+      const maxT = this.CENTER_PX;
 
       const down = (e) => {
         this.dragging = true;
@@ -401,9 +454,8 @@
         const y = (e.touches ? e.touches[0].clientY : e.clientY);
         const dy = y - this.startY;
 
-        // Faster feel: 1:1 drag, clamped
         let next = this.startTarget + dy;
-        next = clamp(next, minOffset, maxOffset);
+        next = clamp(next, minT, maxT);
         this.target = next;
         this.startFollow();
       };
@@ -432,6 +484,7 @@
     wrap: document.getElementById("waterWrap"),
     track: document.getElementById("waterTrack"),
     values: waterValues,
+    setSelectedText: (w) => { waterSelected.textContent = String(Math.round(w)); },
     onChange: (w) => {
       if (syncing) return;
       syncing = true;
@@ -446,6 +499,7 @@
     wrap: document.getElementById("coffeeWrap"),
     track: document.getElementById("coffeeTrack"),
     values: coffeeValues,
+    setSelectedText: (c) => { coffeeSelected.textContent = fmt1(c); },
     onChange: (c) => {
       if (syncing) return;
       syncing = true;
